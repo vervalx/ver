@@ -1,0 +1,19 @@
+local UserInputService = game:GetService("UserInputService")
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    if input.KeyCode == Enum.KeyCode.J then
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and (string.find(obj.Name, "Bush") or string.find(obj.Name, "Fern")) then
+                obj:Destroy()
+            elseif obj:IsA("Model") and string.find(obj.Name, "Tree") then
+                for _, part in pairs(obj:GetDescendants()) do
+                    if part:IsA("MeshPart") and part.Color == Color3.fromRGB(163, 162, 165) then
+                        part:Destroy()
+                    end
+                end
+            end
+        end
+    end
+end)
