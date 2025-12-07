@@ -1,0 +1,229 @@
+local RS = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+local Mouse = LP:GetMouse()
+local Cam = workspace.CurrentCamera
+local TextService = game:GetService("TextService")
+local gui = Instance.new("ScreenGui", LP.PlayerGui)
+local label = Instance.new("TextLabel")
+label.Parent = gui
+label.BackgroundColor3 = Color3.new(0,0,0)
+label.TextColor3 = Color3.new(1,1,1)
+label.TextScaled = false
+label.TextSize = 8
+label.TextXAlignment = Enum.TextXAlignment.Left
+label.TextYAlignment = Enum.TextYAlignment.Top
+label.Visible = false
+label.AnchorPoint = Vector2.new(0, 0.5)
+label.Position = UDim2.new(0, 20, 0.5, 0)
+label.Size = UDim2.new(0, 150, 0, 20)
+label.RichText = true
+
+local UIPadding = Instance.new("UIPadding")
+UIPadding.Parent = label
+UIPadding.PaddingLeft = UDim.new(0, 10)
+
+local ignoredSlots = {
+    "EquipmentLighter", "EquipmentMap", "Melee", "EquipmentGPS",
+    "EquipmentKeyChain", "EquipmentRadio", "EquipmentCompass"
+}
+local ignoredSlotAttributes = {"ClothingLegArmor", "ClothingGloves", "ClothingMask"}
+local ignoredNames = {
+    "F1", "M84", "PG7", "RGD5", "RGO", "S8KO",
+    "OrangeCard", "BlueCard", "RedCard",
+    "DuctTape", "Nails", "Nuts", "MetalChunks", "Bolts", "SteelPipe", "SuperGlue",
+    "PH2Screwdriver", "FlatScrewdriver", "Wrench", "CopperCoil", "AABattery", "Hammer",
+    "CottonFabric", "RipStopFabric", "AramidFabric", "Fuze", "LinenFabric", "OilCan",
+    "OilCanSuppressor", "WeaponParts", "Planks", "Rags", "MaxEnergy", "ResKola",
+    "CondensedMilk", "WaterBottle", "BloxyCola", "Beans", "CatfrogSoda", "ChocolateBar",
+    "GP5", "GP5Filter", "GP5"
+}
+local hotbarSlots = {"ItemBack1", "ItemBack2", "ItemHip1"}
+local clothingNames = {
+    "6B2", "6B23", "6B27", "6B43", "6B47", "6B5", "Altyn", "Attak5", "Balaclava", "Bandoiler",
+    "CamoPants", "CamoShirt", "CivilianPants", "CivilianShirt", "CombatGloves", "ConcealedVest",
+    "DozerArmor", "FastMT", "GP5", "GhillieHood", "GhillieLegs", "GhillieTorso", "GorkaPants",
+    "GorkaShirt", "HSPV", "HandWraps", "HeadMount", "IOTV4", "JPC", "KneePads", "Kulon",
+    "LegArmor", "Lynx", "MotorcycleHelmet", "SSH68", "ScavKingHelmet", "ScavKingVest", "Smersh",
+    "SpecopsBackpack", "TORS", "TankCap", "Tortilla", "UNOHelmet", "UNOVest", "WastelandBackpack",
+    "WastelandPants", "WastelandShirt", "ZSh"
+}
+
+local highlightNames = {
+    Altyn = true, DozerArmor = true, ["6B43"] = true,
+    AsVal = true, M4 = true, R700 = true, TFZ98S = true, PKM = true
+}
+
+local function isInTable(tbl, value)
+    for _, v in ipairs(tbl) do
+        if v == value then return true end
+    end
+    return false
+end
+
+local function formatEntry(prefix, name, count)
+    local txt = name .. (count and (count > 1 and (" ["..count.."]") or "") or "")
+    if highlightNames[name] then
+        return prefix .. '<font color="rgb(0,255,0)">' .. txt .. '</font>'
+    end
+    return prefix .. txt
+end
+
+local function readNestedInventory(folder, prefix)
+    local out = {}
+    local counts = {}
+    for _, v in ipairs(folder:GetChildren()) do
+        local lname = string.lower(v.Name)
+        if not isInTable(ignoredNames, v.Name) and not string.find(lname, "key") then
+            counts[v.Name] = (counts[v.Name] or 0) + 1
+        end
+    end
+    for name, c in pairs(counts) do
+        table.insert(out, formatEntry(prefix, name, c))
+        local item = folder:FindFirstChild(name)
+        if item then
+            if item:FindFirstChild("Inventory") then
+                for _, line in ipairs(readNestedInventory(item.Inventory, prefix .. "   ")) do table.insert(out, line) end
+            end
+            if item:FindFirstChild("Attachments") then
+                for _, line in ipairs(readNestedInventory(item.Attachments, prefix .. "   ")) do table.insert(out, line) end
+            end
+        end
+    end
+    return out
+end
+
+local function readInventory(folder)
+    local hotbar, clothing, other = {}, {}, {}
+    for _, v in ipairs(folder:GetChildren()) do
+        local lname = string.lower(v.Name)
+        if v.Name ~= "KeyChain" and not string.find(lname, "key") and not isInTable(ignoredNames, v.Name) then
+            local skip = false
+            if v:IsA("ValueBase") and string.find(string.lower(tostring(v.Value)), "key") then
+                skip = true
+            end
+            local slotAttr = v:GetAttribute("Slot")
+            if slotAttr and (isInTable(ignoredSlots, slotAttr) or isInTable(ignoredSlotAttributes, slotAttr)) then
+                skip = true
+            end
+            if not skip then
+                if slotAttr and isInTable(hotbarSlots, slotAttr) then
+                    table.insert(hotbar, v)
+                elseif isInTable(clothingNames, v.Name) then
+                    table.insert(clothing, v)
+                else
+                    table.insert(other, v)
+                end
+            end
+        end
+    end
+
+    local out = {}
+
+    if #hotbar > 0 then
+        table.insert(out, "=== Hotbar ===")
+        local counts = {}
+        for _, v in ipairs(hotbar) do counts[v.Name] = (counts[v.Name] or 0) + 1 end
+        for name, c in pairs(counts) do
+            table.insert(out, formatEntry("", name, c))
+            local item = folder:FindFirstChild(name)
+            if item and item:FindFirstChild("Inventory") then
+                for _, line in ipairs(readNestedInventory(item.Inventory, "   ")) do table.insert(out, line) end
+            end
+            if item and item:FindFirstChild("Attachments") then
+                for _, line in ipairs(readNestedInventory(item.Attachments, "   ")) do table.insert(out, line) end
+            end
+        end
+    end
+
+    if #clothing > 0 then
+        table.insert(out, "=== Clothing ===")
+        local counts = {}
+        local rep = {}
+        for _, v in ipairs(clothing) do
+            counts[v.Name] = (counts[v.Name] or 0) + 1
+            if not rep[v.Name] then rep[v.Name] = v end
+        end
+
+        local names = {}
+        for name in pairs(counts) do table.insert(names, name) end
+
+        local function priority(inst)
+            if not inst then return 1 end
+            local s = inst:GetAttribute("Slot")
+            if s == "ClothingHeadware" then return 3 end
+            if s == "ClothingChestRig" then return 2 end
+            return 1
+        end
+
+        table.sort(names, function(a,b)
+            local pa = priority(rep[a])
+            local pb = priority(rep[b])
+            if pa == pb then return a < b end
+            return pa > pb
+        end)
+
+        for _, name in ipairs(names) do
+            local c = counts[name]
+            table.insert(out, formatEntry("", name, c))
+            local item = folder:FindFirstChild(name)
+            if item and item:FindFirstChild("Inventory") then
+                for _, line in ipairs(readNestedInventory(item.Inventory, "   ")) do table.insert(out, line) end
+            end
+            if item and item:FindFirstChild("Attachments") then
+                for _, line in ipairs(readNestedInventory(item.Attachments, "   ")) do table.insert(out, line) end
+            end
+        end
+    end
+
+    if #other > 0 then
+        table.insert(out, "=== Other ===")
+        local counts = {}
+        for _, v in ipairs(other) do counts[v.Name] = (counts[v.Name] or 0) + 1 end
+        for name, c in pairs(counts) do
+            table.insert(out, formatEntry("", name, c))
+            local item = folder:FindFirstChild(name)
+            if item and item:FindFirstChild("Inventory") then
+                for _, line in ipairs(readNestedInventory(item.Inventory, "   ")) do table.insert(out, line) end
+            end
+            if item and item:FindFirstChild("Attachments") then
+                for _, line in ipairs(readNestedInventory(item.Attachments, "   ")) do table.insert(out, line) end
+            end
+        end
+    end
+
+    return out
+end
+
+local function getText(plrName)
+    local root = RS.Players:FindFirstChild(plrName)
+    if not root then return "" end
+    local inv = root:FindFirstChild("Inventory")
+    if not inv then return "" end
+    return table.concat(readInventory(inv), "\n")
+end
+
+local function getPlayerOnMouse()
+    local ray = Cam:ScreenPointToRay(Mouse.X, Mouse.Y)
+    local o = ray.Origin
+    local d = ray.Direction * 500
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local rel = hrp.Position - o
+            local angle = math.deg(math.acos(rel.Unit:Dot(d.Unit)))
+            if angle < 5 then return plr end
+        end
+    end
+    return nil
+end
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    local plr = getPlayerOnMouse()
+    if not plr then label.Visible = false return end
+    local text = getText(plr.Name)
+    label.Text = text
+    label.Visible = true
+    local size = TextService:GetTextSize(text, label.TextSize, Enum.Font.Legacy, Vector2.new(500, 9999))
+    label.Size = UDim2.new(0, (size.X + 10) + 20, 0, size.Y + 10)
+end)
